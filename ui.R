@@ -10,7 +10,7 @@
 library(shiny)
 
 shinyUI(fluidPage(
-   tags$head(includeScript("google-analytics.js")),
+   #tags$head(includeScript("google-analytics.js")),
    
    titlePanel("Tidy Up PBR Data"),
    sidebarLayout(

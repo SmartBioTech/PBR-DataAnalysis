@@ -14,23 +14,23 @@ library(mongolite)
 
 options(shiny.maxRequestSize = 10 * 1024 ^ 2)
 
-url <- "mongodb://SAServer:DoAB@ds048279.mlab.com:48279/shinyapps"
-collection <- "TidyUpPBRData"
-mLab <- mongo(collection, url = url)
+#url <- "mongodb://SAServer:DoAB@ds048279.mlab.com:48279/shinyapps"
+#collection <- "TidyUpPBRData"
+#mLab <- mongo(collection, url = url)
 
 shinyServer(function(input, output, session) {
    observeEvent(input$send, {
-      mLab$insert(
-         data.frame(
-            Sys.Date(),
-            "User",
-            input$name,
-            input$surname,
-            input$email,
-            input$organization,
-            input$department
-         )
-      )
+      # mLab$insert(
+      #    data.frame(
+      #       Sys.Date(),
+      #       "User",
+      #       input$name,
+      #       input$surname,
+      #       input$email,
+      #       input$organization,
+      #       input$department
+      #    )
+      # )
       updateActionButton(session, "send",
                          label = "Successfully Sent!")
    }, ignoreNULL = TRUE)
@@ -49,16 +49,16 @@ shinyServer(function(input, output, session) {
          sep = input$sep,
          dec = input$dec
       )
-      mLab$insert(
-         data.frame(
-            Sys.Date(),
-            "File",
-            inFile$name,
-            inFile$type,
-            inFile$size,
-            inFile$datapath
-         )
-      )
+      # mLab$insert(
+      #    data.frame(
+      #       Sys.Date(),
+      #       "File",
+      #       inFile$name,
+      #       inFile$type,
+      #       inFile$size,
+      #       inFile$datapath
+      #    )
+      # )
       if (inFile$type == 'application/x-zip-compressed')
          file.remove(fileunz)
       return(untidydata)
