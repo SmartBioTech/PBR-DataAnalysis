@@ -20,6 +20,8 @@ source('DB-connect.R', echo = FALSE)
 dataColumnNames <- readRDS('data/dataColumnNames.rds')
 
 server <- function(input, output, session) {
+   rangesView <- reactiveValues(x = NULL, y = NULL)
+   rangesProcessing <- reactiveValues(x = NULL, y = NULL)
    observeEvent(input$send, {
       updateActionButton(
          session, 'regSend',
@@ -28,6 +30,26 @@ server <- function(input, output, session) {
    },
    ignoreNULL = TRUE
    )
+   observeEvent(input$dataViewPlot_dblClick, {
+      brush <- input$dataViewPlot_brush
+      if (!is.null(brush)) {
+         rangesView$x <- c(brush$xmin, brush$xmax)
+         rangesView$y <- c(brush$ymin, brush$ymax)
+      } else {
+         rangesView$x <- NULL
+         rangesView$y <- NULL
+      }
+   })
+   observeEvent(input$dataProcessingPlot_dblClick, {
+      brush <- input$dataProcessingPlot_brush
+      if (!is.null(brush)) {
+         rangesProcessing$x <- c(brush$xmin, brush$xmax)
+         rangesProcessing$y <- c(brush$ymin, brush$ymax)
+      } else {
+         rangesProcessing$x <- NULL
+         rangesProcessing$y <- NULL
+      }
+   })
 # File input ====
    dataInput <- reactive({
       if (is.null(input$dataFile) || (input$dataFile$type != 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
@@ -79,6 +101,37 @@ server <- function(input, output, session) {
                   pbrDataFile  <- loadWorkbook(file = input$dataFile$datapath)
                   addWorksheet(pbrDataFile, 'TidyData')
                   writeData(pbrDataFile, 'TidyData', dataProcessed())
+                  saveWorkbook(pbrDataFile, input$dataFile$datapath, overwrite = TRUE)
+                  incProgress(0.4)
+                  file.copy(input$dataFile$datapath, file)
+               }
+            )
+         }
+      }
+   )
+# Analysis file download ====
+   output$downloadAnalysis <- downloadHandler(
+      # This function returns a string which tells the client
+      # browser what name to use when saving the file.
+      filename = function() {
+         paste(input$dataFile$name)
+      }
+      ,
+      # This function should write data to a file given to it by
+      # the argument 'file'.
+      content = function(file) {
+         # Write to a file specified by the 'file' argument
+         if (input$dataFile$type ==
+             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+            withProgress(
+               message = "Writing processed data...",
+               value = 0.4,
+               {
+                  pbrDataFile  <- loadWorkbook(file = input$dataFile$datapath)
+                  addWorksheet(pbrDataFile, 'TidyData')
+                  writeData(pbrDataFile, 'TidyData', dataProcessed())
+                  addWorksheet(pbrDataFile, 'Analysis')
+                  writeData(pbrDataFile, 'Analysis', growthRates())
                   saveWorkbook(pbrDataFile, input$dataFile$datapath, overwrite = TRUE)
                   incProgress(0.4)
                   file.copy(input$dataFile$datapath, file)
@@ -147,7 +200,7 @@ server <- function(input, output, session) {
    output$dataViewPlot <- renderPlot({
       data <- dataProcessed()
       if (!is.null(data)) {
-         plot(x = data$time, y = data[[dataColumnNames$X[match(input$dataColumn, dataColumnNames$Y)]]], xlab = 'Experiment duration, h', ylab = 'Optical density, AU')
+         plot(x = data$time, y = data[[dataColumnNames$X[match(input$dataColumn, dataColumnNames$Y)]]], xlim = rangesView$x, ylim = rangesView$y, xlab = 'Experiment duration, h', ylab = 'Optical density, AU')
       }
    })
    
@@ -166,7 +219,7 @@ server <- function(input, output, session) {
          s1 = NULL
          s2 = input$dataProcessingTable_rows_selected
          gRates <- growthRates()
-         plot(x = gRates$time, y = gRates$Dt, xlab = "Experiment duration, h", ylab = "Doubling time, h")
+         plot(x = gRates$time, y = gRates$Dt, xlim = rangesProcessing$x, ylim = rangesProcessing$y, xlab = "Experiment duration, h", ylab = "Doubling time, h")
          if (length(s1)) {
             points(gRates[s1, , drop = FALSE], pch = 19, cex = 1, col = 'green')
          }
@@ -185,7 +238,7 @@ server <- function(input, output, session) {
 
 ui <- fluidPage(
    tags$head(includeScript('google-analytics.js')),
-   titlePanel("", windowTitle = "Tidy Up Data"),
+   titlePanel("", windowTitle = "PBR Data Analysis"),
    sidebarLayout(
       # Sidebar panel ====
       sidebarPanel(
@@ -237,6 +290,9 @@ ui <- fluidPage(
                   'right',
                   options = list(container = 'body')
                )
+            ),
+            fluidRow(
+               downloadButton('downloadAnalysis', "Download")
             )
          ),
          width = 3
@@ -254,7 +310,14 @@ ui <- fluidPage(
                em(textOutput('fileSize')),
                br(),
                textOutput('dataDim'),
-               plotOutput('dataViewPlot', width = '90%')
+               plotOutput('dataViewPlot',
+                          width = '90%',
+                          dblclick = 'dataViewPlot_dblClick',
+                          brush = brushOpts(
+                             id = 'dataViewPlot_brush',
+                             resetOnNew = TRUE
+                             )
+               )
             ), 
             tabPanel(
                "Data Analysis",
@@ -267,7 +330,13 @@ ui <- fluidPage(
                   ),
                   column(
                      8,
-                     plotOutput('dataProcessingPlot')   
+                     plotOutput('dataProcessingPlot',   
+                        dblclick = 'dataProcessingPlot_dblClick',
+                        brush = brushOpts(
+                           id = 'dataProcessingPlot_brush',
+                           resetOnNew = TRUE
+                        )
+                     )
                   )
                )
             ),
