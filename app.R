@@ -68,7 +68,7 @@ server <- function(input, output, session) {
          return(NULL)
       }
       selectChoices <- merge(data.frame(X = colnames(untidyData)), dataColumnNames)
-      updateSelectInput(session, 'dataColumn', choices = selectChoices$Y, selected = 'OD680, AU')
+      updateSelectInput(session, 'selectDataView', choices = selectChoices$Y, selected = 'OD680, AU')
       factor <- 3600 / (input$interval * 60)
       untidyData$time <- round(untidyData$time * factor) / factor
       untidyData %>%
@@ -200,7 +200,7 @@ server <- function(input, output, session) {
    output$dataViewPlot <- renderPlot({
       data <- dataProcessed()
       if (!is.null(data)) {
-         plot(x = data$time, y = data[[dataColumnNames$X[match(input$dataColumn, dataColumnNames$Y)]]], xlim = rangesView$x, ylim = rangesView$y, xlab = 'Experiment duration, h', ylab = 'Optical density, AU')
+         plot(x = data$time, y = data[[dataColumnNames$X[match(input$selectDataView, dataColumnNames$Y)]]], xlim = rangesView$x, ylim = rangesView$y, xlab = 'Experiment duration, h', ylab = 'Optical density, AU')
       }
    })
    
@@ -267,14 +267,14 @@ ui <- fluidPage(
                   'right', options = list(container = 'body')
                )
             ),
+            tags$hr(),
             fluidRow(
-               downloadButton('downloadData', "Download")
+               selectInput('selectDataView', "Data to view", "OD680, AU")
             ),
             tags$hr(),
             fluidRow(
-               selectInput('dataColumn', "Data to View", "OD680, AU")
-            ),
-            tags$hr()
+               downloadButton('downloadData', "Download")
+            )
          ),
          conditionalPanel(
             condition = 'input.conditionedSidePanels == 2',
@@ -291,6 +291,14 @@ ui <- fluidPage(
                   options = list(container = 'body')
                )
             ),
+            tags$hr(),
+            fluidRow(
+               selectInput('selectGrowthRatesData', "Data for growth calculation", c("OD680, AU", "OD720, AU"), "OD680, AU")
+            ),
+            fluidRow(
+               selectInput('selectDilutionPump', "Pump used for dilutions", c("Turbidostat", "Pump 3", "Pump 4", "Pump 5", "Pump 6", "Pump 7"), "Pump 5")
+            ),
+            tags$hr(),
             fluidRow(
                downloadButton('downloadAnalysis', "Download")
             )
