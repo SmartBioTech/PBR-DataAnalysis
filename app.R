@@ -7,22 +7,21 @@
 options(shiny.maxRequestSize = 12 * 1024 ^ 2)
 
 library(dplyr)
-library(dtplyr)
 library(DT)
 library(openxlsx)
+library(plotrix)
 library(shiny)
 library(shinyBS)
 library(RMySQL)
 library(tidyr)
 
-source('DB-connect.R', echo = FALSE)
-
 dataColumnNames <- readRDS('data/dataColumnNames.rds')
-
+# SERVER Part ====
 server <- function(input, output, session) {
    rangesView <- reactiveValues(x = NULL, y = NULL)
    rangesProcessing <- reactiveValues(x = NULL, y = NULL)
-   observeEvent(input$send, {
+   observeEvent(input$regSend, {
+      source('dbRegister.R', local = TRUE, echo = FALSE)
       updateActionButton(
          session, 'regSend',
          label = "Successfully Sent!"
@@ -35,9 +34,15 @@ server <- function(input, output, session) {
       if (!is.null(brush)) {
          rangesView$x <- c(brush$xmin, brush$xmax)
          rangesView$y <- c(brush$ymin, brush$ymax)
+         output$downloadSize <- renderText({
+            paste0("Data time range reduced to: ", floor(rangesView$x[1]), " to ", ceiling(rangesView$x[2]), " h")
+         })
       } else {
          rangesView$x <- NULL
          rangesView$y <- NULL
+         output$downloadSize <- renderText({
+            paste0("")
+         })
       }
    })
    observeEvent(input$dataProcessingPlot_dblClick, {
@@ -50,40 +55,30 @@ server <- function(input, output, session) {
          rangesProcessing$y <- NULL
       }
    })
-# File input ====
+   # File processing ====
+   # Upload
    dataInput <- reactive({
-      if (is.null(input$dataFile) || (input$dataFile$type != 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
+      if (is.null(input$dataFile) || (input$dataFile$type !=
+                                      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
          return(NULL)
       }
-      withProgress(message = "Processing uploaded data...", value = 0.4, {
-         untidyData <- readWorkbook(input$dataFile$datapath, sheet = 'Data')
-         incProgress(0.4)
-      })
+      withProgress(
+         message = "Processing uploaded data...",
+         value = 0.4,
+         {
+            untidyData <- readWorkbook(input$dataFile$datapath, sheet = 'Data')
+            incProgress(0.4)
+         }
+      )
       return(untidyData)
    })
-# Data processing ====
-   dataProcessed <- reactive({
-      untidyData <- dataInput()
-      if (is.null(untidyData)) {
-         return(NULL)
-      }
-      selectChoices <- merge(data.frame(X = colnames(untidyData)), dataColumnNames)
-      updateSelectInput(session, 'selectDataView', choices = selectChoices$Y, selected = 'OD680, AU')
-      factor <- 3600 / (input$interval * 60)
-      untidyData$time <- round(untidyData$time * factor) / factor
-      untidyData %>%
-         fill(2:length(.)) %>%
-         group_by(time) %>%
-         summarize_all(mean) %>%
-         arrange(time)
-   })
-# Processed file download ====
+   # Download - TidyData
    output$downloadData <- downloadHandler(
       # This function returns a string which tells the client
       # browser what name to use when saving the file.
       filename = function() {
          if (input$dataFile$type == 
-               'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
             paste(input$dataFile$name)
          }
       }
@@ -93,23 +88,30 @@ server <- function(input, output, session) {
       content = function(file) {
          # Write to a file specified by the 'file' argument
          if (input$dataFile$type ==
-               'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
             withProgress(
                message = "Writing processed data...",
                value = 0.4,
                {
                   pbrDataFile  <- loadWorkbook(file = input$dataFile$datapath)
-                  addWorksheet(pbrDataFile, 'TidyData')
-                  writeData(pbrDataFile, 'TidyData', dataProcessed())
-                  saveWorkbook(pbrDataFile, input$dataFile$datapath, overwrite = TRUE)
+                  if (is.na(match('TidyData', getSheetNames(file = input$dataFile$datapath)))) {
+                     addWorksheet(pbrDataFile, 'TidyData')   
+                  }
+                  if (!is.null(rangesView$x)) {
+                     tidyData <- dataProcessed() %>% filter(.$time > floor(rangesView$x[1])) %>% filter(.$time < ceiling(rangesView$x[2]))
+                  } else {
+                     tidyData <- dataProcessed()
+                  }
+                  writeData(pbrDataFile, 'TidyData', tidyData)
+                  saveWorkbook(pbrDataFile, paste0(input$dataFile$datapath, '-tempDW'), overwrite = TRUE)
                   incProgress(0.4)
-                  file.copy(input$dataFile$datapath, file)
+                  file.copy(paste0(input$dataFile$datapath, '-tempDW'), file)
                }
             )
          }
       }
    )
-# Analysis file download ====
+   # Download - Analysis
    output$downloadAnalysis <- downloadHandler(
       # This function returns a string which tells the client
       # browser what name to use when saving the file.
@@ -128,53 +130,101 @@ server <- function(input, output, session) {
                value = 0.4,
                {
                   pbrDataFile  <- loadWorkbook(file = input$dataFile$datapath)
-                  addWorksheet(pbrDataFile, 'TidyData')
+                  if (is.na(match('TidyData', getSheetNames(file = input$dataFile$datapath)))) {
+                     addWorksheet(pbrDataFile, 'TidyData')   
+                  }
                   writeData(pbrDataFile, 'TidyData', dataProcessed())
-                  addWorksheet(pbrDataFile, 'Analysis')
+                  if (is.na(match('Analysis', getSheetNames(file = input$dataFile$datapath)))) {
+                     addWorksheet(pbrDataFile, 'Analysis')
+                  }
                   writeData(pbrDataFile, 'Analysis', growthRates())
-                  saveWorkbook(pbrDataFile, input$dataFile$datapath, overwrite = TRUE)
+                  saveWorkbook(pbrDataFile, paste0(input$dataFile$datapath, '-tempDA'), overwrite = TRUE)
                   incProgress(0.4)
-                  file.copy(input$dataFile$datapath, file)
+                  file.copy(paste0(input$dataFile$datapath, '-tempDA'), file)
                }
             )
          }
       }
    )
-# Growth Rates calculataion ====
+   # Data processing ====
+   dataProcessed <- reactive({
+      # Read data and remove empty columns
+      untidyData <- Filter(function(x)!all(is.na(x)), dataInput())
+      if (is.null(untidyData)) {
+         return(NULL)
+      }
+      selectChoices <- merge(data.frame(X = colnames(untidyData)), dataColumnNames) 
+      if(input$selectDataView == "") {
+         selected <- "OD680, AU"
+      } else {
+         selected = input$selectDataView
+      }
+      if(input$selectDataView2 == "" || input$selectDataView2 == "-") {
+         selected2 <- "-"
+      } else {
+         selected2 = input$selectDataView2
+      }
+      updateSelectInput(session, 'selectDataView', choices = selectChoices$Y, selected = selected)
+      updateSelectInput(session, 'selectDataView2', choices = c("-", selectChoices$Y), selected = selected2)
+      if (input$interval > 0) {
+         factor <- 3600 / (input$interval * 60)
+         untidyData$time <- round(untidyData$time * factor) / factor
+         untidyData %>%
+            fill(eval(2 : ncol(.))) %>%
+            group_by(time) %>%
+            summarize_all(mean) %>%
+            arrange(time)
+      } else {
+         untidyData %>% fill(eval(2 : ncol(.)))
+      }
+   })
+   # Growth rates calculation
    growthRates <- reactive({
+      data <- dataProcessed()
+      pumps <- grep('pumps.pump-.$', colnames(data), value = TRUE)
+      if (length(pumps) < 1) {
+         return(data.frame(time = c(0), mu = c(0), R2 = c(0), Dt = c(0)))
+      }
+      columnName <- dataColumnNames$X[match(input$selectDilutionPump, dataColumnNames$Y)]
+      if(is.null(data[[columnName]]) || (sum(data[[columnName]], na.rm = TRUE) == 0)) {
+         return(data.frame(time = c(0), mu = c(0), R2 = c(0), Dt = c(0)))
+      }
       withProgress(
          message = "Calculating growth rates...",
          value = 0.0,
          {
-            data <- dataProcessed()
-            pumpOn <- which(data$`pumps.pump-5` > 0)
+            pumpOn <- which(data[[columnName]] > 0)
             expFitStart <- c()
             expFitStop <- c()
             time <- c()
-            Dt <- c()
+            mu <- c()
             R2 <- c()
+            Dt <- c()
             for (i in 2:(length(pumpOn) - 1)) {
-               if (data$`pumps.pump-5`[pumpOn[i] - 1] == 0) expFitStop <- c(expFitStop, pumpOn[i])
-               else if (data$`pumps.pump-5`[pumpOn[i] + 1] == 0) expFitStart <- c(expFitStart, pumpOn[i] + 1)
+               if (data[[columnName]][pumpOn[i] - 1] == 0) expFitStop <- c(expFitStop, pumpOn[i])
+               else if (data[[columnName]][pumpOn[i] + 1] == 0) expFitStart <- c(expFitStart, pumpOn[i] + 1)
             }
             incProgress(0.15)
             for (j in 1:length(expFitStart)) {
-               # interval <- c((expFitStop[j] - ceiling(expFitStop[j] - expFitStart[j]) * (1 - input$lagTime)):expFitStop[j])
-               interval <- c((expFitStart[j] + ceiling(input$lagTime/input$interval)):expFitStop[j])
+               interval <- c((expFitStart[j] + floor(input$lagTime/input$interval)):expFitStop[j])
+               incProgress(0.15 + (j / length(expFitStart)) * 0.85)
+               if (length(interval) < 4) {
+                  next
+               }
                timeFit <- data$time[interval]
-               dataFit <- data$`od-sensors.od-680`[interval]
+               dataFit <- data[[dataColumnNames$X[match(input$selectGrowthRatesData, dataColumnNames$Y)]]][interval]
                fit <- nls(dataFit ~ exp(a + b * timeFit),
-                          start = list(a = 0, b = 0.5),
-                          control = list(maxiter = 99, warnOnly = TRUE))
+                          start = list(a = 0, b = 0.1),
+                          control = list(maxiter = 99, minFactor = 1/2048, warnOnly = TRUE))
                time <- c(time, timeFit[length(timeFit)])
+               mu <- c(mu, coef(fit)[2] * 24)
                R2 <- c(R2, cor(dataFit, predict(fit)))
                Dt <- c(Dt, 1 / coef(fit)[2] * log(2))
-               incProgress(0.15 + (j / length(expFitStart)) * 0.85)
             }
          })
-      return(data.frame(time, Dt, R2))
+      return(data.frame(time, mu, R2, Dt))
    })
-# UI outputs hadling ====
+   # Outputs hadling ====
    output$fileName <- renderText({
       if (!is.null(input$dataFile$name))
          paste("Uploaded file name is ", input$dataFile$name)
@@ -194,24 +244,54 @@ server <- function(input, output, session) {
             dim(dataProcessed())[1],
             " x ",
             dim(dataInput())[2],
+            "/",
+            dim(dataProcessed())[2],
             " (rows x cols)"
          )
    })
    output$dataViewPlot <- renderPlot({
       data <- dataProcessed()
       if (!is.null(data)) {
-         plot(x = data$time, y = data[[dataColumnNames$X[match(input$selectDataView, dataColumnNames$Y)]]], xlim = rangesView$x, ylim = rangesView$y, xlab = 'Experiment duration, h', ylab = 'Optical density, AU')
+         if(input$selectDataView2 == "" || input$selectDataView2 == "-") {
+            plot(x = data$time,
+                 y = data[[dataColumnNames$X[match(input$selectDataView, dataColumnNames$Y)]]],
+                 xlim = rangesView$x,
+                 ylim = rangesView$y,
+                 xlab = 'Experiment duration, h',
+                 ylab = input$selectDataView)
+         } else {
+            if (!is.null(rangesView$y)) {
+               ymin = min(data[[dataColumnNames$X[match(input$selectDataView, dataColumnNames$Y)]]], na.rm = TRUE)
+               ymax = max(data[[dataColumnNames$X[match(input$selectDataView, dataColumnNames$Y)]]], na.rm = TRUE)
+               y2min = min(data[[dataColumnNames$X[match(input$selectDataView2, dataColumnNames$Y)]]], na.rm = TRUE)
+               y2max = max(data[[dataColumnNames$X[match(input$selectDataView2, dataColumnNames$Y)]]], na.rm = TRUE)
+               y2lim <- c((rangesView$y[1] - ymin) / (ymax - ymin) * (y2max - y2min) + y2min, y2max - (ymax - rangesView$y[2]) / (ymax - ymin) * (y2max - y2min))
+            } else {
+               y2lim <- NULL
+            }
+            twoord.plot(lx = data$time,
+                        ly = data[[dataColumnNames$X[match(input$selectDataView, dataColumnNames$Y)]]],
+                        rx = data$time,
+                        ry = data[[dataColumnNames$X[match(input$selectDataView2, dataColumnNames$Y)]]],
+                        xlim = rangesView$x,
+                        lylim = rangesView$y,
+                        rylim = y2lim,
+                        xlab = 'Experiment duration, h',
+                        ylab = input$selectDataView,
+                        rylab = input$selectDataView2,
+                        rcol = 3,
+                        rpch = 1)
+         }
       }
    })
-   
    # https://rstudio.github.io/DT/options.html
    # https://datatables.net/reference/option/dom
    output$dataProcessingTable <- DT::renderDataTable({
       if (!is.null(dataProcessed()))
          datatable(growthRates(),
-                  options = list(dom = 'tlp', pageLength = 8, lengthChange = FALSE, searching = FALSE)) %>%
-                  formatRound(c('time','Dt','R2'), digits = 2)
-      },
+                   options = list(dom = 'tlp', pageLength = 8, lengthChange = FALSE, searching = FALSE)) %>%
+         formatRound(c('time', 'mu', 'R2', 'Dt'), digits = 2)
+   },
       server = FALSE
    )
    output$dataProcessingPlot <- renderPlot({
@@ -219,12 +299,24 @@ server <- function(input, output, session) {
          s1 = NULL
          s2 = input$dataProcessingTable_rows_selected
          gRates <- growthRates()
-         plot(x = gRates$time, y = gRates$Dt, xlim = rangesProcessing$x, ylim = rangesProcessing$y, xlab = "Experiment duration, h", ylab = "Doubling time, h")
+         # plot(x = gRates$time, y = gRates$Dt, xlim = rangesProcessing$x, ylim = rangesProcessing$y, xlab = "Experiment duration, h", ylab = "Doubling time, h")
+         twoord.plot(lx = gRates$time,
+                     ly = gRates$Dt,
+                     rx = gRates$time,
+                     ry = gRates$mu,
+                     xlim = rangesProcessing$x,
+                     lylim = rangesProcessing$y,
+                     # rylim = y2lim,
+                     xlab = 'Experiment duration, h',
+                     ylab = 'Doubling time, h',
+                     rylab = 'Specific growth rate, 1/day',
+                     rcol = 3,
+                     rpch = 1)
          if (length(s1)) {
             points(gRates[s1, , drop = FALSE], pch = 19, cex = 1, col = 'green')
          }
          if (length(s2)) {
-            points(gRates[s2, , drop = FALSE], pch = 19, cex = 1.25)
+            points(gRates$time[s2], gRates$Dt[s2], pch = 19, cex = 1.25)
          }
       }
    })
@@ -235,12 +327,12 @@ server <- function(input, output, session) {
 #
 # http://shiny.rstudio.com
 #
-
+# UI Layout ====
 ui <- fluidPage(
    tags$head(includeScript('google-analytics.js')),
    titlePanel("", windowTitle = "PBR Data Analysis"),
    sidebarLayout(
-      # Sidebar panel ====
+      # UI - Sidebar panel ====
       sidebarPanel(
          conditionalPanel(
             condition = 'input.conditionedSidePanels == 1',
@@ -258,9 +350,8 @@ ui <- fluidPage(
                sliderInput(
                   'interval',
                   "Averaging interval, min", 
-                  value = 1, min = 0.5, max = 10, step = 0.1
+                  value = 1, min = 0.0, max = 60, step = 0.1
                ),
-               # numericInput('interval', 'Interval, min', 1, min = 0.5, max = 10, step = 0.1, width = '100px'),
                bsTooltip(
                   'interval',
                   "Interval that is used for lumping and averaging untidy data. Provided in minutes.",
@@ -271,9 +362,13 @@ ui <- fluidPage(
             fluidRow(
                selectInput('selectDataView', "Data to view", "OD680, AU")
             ),
+            fluidRow(
+               selectInput('selectDataView2', "Additional data to view", "-")
+            ),
             tags$hr(),
             fluidRow(
-               downloadButton('downloadData', "Download")
+               downloadButton('downloadData', "Download"),
+               textOutput('downloadSize')
             )
          ),
          conditionalPanel(
@@ -296,7 +391,7 @@ ui <- fluidPage(
                selectInput('selectGrowthRatesData', "Data for growth calculation", c("OD680, AU", "OD720, AU"), "OD680, AU")
             ),
             fluidRow(
-               selectInput('selectDilutionPump', "Pump used for dilutions", c("Turbidostat", "Pump 3", "Pump 4", "Pump 5", "Pump 6", "Pump 7"), "Pump 5")
+               selectInput('selectDilutionPump', "Pump used for dilutions", c("Pump 0", "Pump 3", "Pump 4", "Pump 5", "Pump 6", "Pump 7"), "Pump 0")
             ),
             tags$hr(),
             fluidRow(
@@ -305,7 +400,7 @@ ui <- fluidPage(
          ),
          width = 3
       ),
-      # Main panel ====
+      # UI - Main panel ====
       mainPanel(
          tabsetPanel(
             type = 'tabs',
@@ -324,7 +419,7 @@ ui <- fluidPage(
                           brush = brushOpts(
                              id = 'dataViewPlot_brush',
                              resetOnNew = TRUE
-                             )
+                          )
                )
             ), 
             tabPanel(
@@ -339,11 +434,11 @@ ui <- fluidPage(
                   column(
                      8,
                      plotOutput('dataProcessingPlot',   
-                        dblclick = 'dataProcessingPlot_dblClick',
-                        brush = brushOpts(
-                           id = 'dataProcessingPlot_brush',
-                           resetOnNew = TRUE
-                        )
+                                dblclick = 'dataProcessingPlot_dblClick',
+                                brush = brushOpts(
+                                   id = 'dataProcessingPlot_brush',
+                                   resetOnNew = TRUE
+                                )
                      )
                   )
                )
@@ -353,7 +448,7 @@ ui <- fluidPage(
          width = 9
       )
    ),
-   # Bottom panel ====
+      # UI - Bottom panel ====
    fluidRow(
       column(
          width = 3,
@@ -402,5 +497,4 @@ ui <- fluidPage(
       )
    )
 )
-
 shinyApp(ui = ui, server = server)
