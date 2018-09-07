@@ -8,6 +8,7 @@ options(shiny.maxRequestSize = 12 * 1024 ^ 2)
 
 library(dplyr)
 library(DT)
+library(mongolite)
 library(openxlsx)
 library(plotrix)
 library(shiny)
@@ -60,7 +61,15 @@ server <- function(input, output, session) {
    dataInput <- reactive({
       if (is.null(input$dataFile) || (input$dataFile$type !=
                                       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) {
-         return(NULL)
+        withProgress(
+          message = "Processing example data...",
+          value = 0.4,
+          {
+            untidyData <- readWorkbook('data/Cyanothece_LD1212_LL.xlsx', sheet = 'Data')
+            incProgress(0.4)
+          }
+        )
+        return(untidyData)
       }
       withProgress(
          message = "Processing uploaded data...",
@@ -206,7 +215,7 @@ server <- function(input, output, session) {
             }
             incProgress(0.15)
             for (j in 1:length(expFitStart)) {
-               interval <- c((expFitStart[j] + floor(input$lagTime/input$interval)):expFitStop[j])
+               interval <- c((expFitStart[j] + floor(input$ignoredData/input$interval)):expFitStop[j])
                incProgress(0.15 + (j / length(expFitStart)) * 0.85)
                if (length(interval) < 4) {
                   next
@@ -288,7 +297,7 @@ server <- function(input, output, session) {
    # https://datatables.net/reference/option/dom
    output$dataProcessingTable <- DT::renderDataTable({
       if (!is.null(dataProcessed()))
-         datatable(growthRates(),
+         datatable(growthRates() %>% filter(R2 >= (input$acceptableR2 / 100)),
                    options = list(dom = 'tlp', pageLength = 8, lengthChange = FALSE, searching = FALSE)) %>%
          formatRound(c('time', 'mu', 'R2', 'Dt'), digits = 2)
    },
@@ -298,7 +307,7 @@ server <- function(input, output, session) {
       if (!is.null(dataProcessed())) {
          s1 = NULL
          s2 = input$dataProcessingTable_rows_selected
-         gRates <- growthRates()
+         gRates <- growthRates() %>% filter(R2 >= (input$acceptableR2 / 100))
          # plot(x = gRates$time, y = gRates$Dt, xlim = rangesProcessing$x, ylim = rangesProcessing$y, xlab = "Experiment duration, h", ylab = "Doubling time, h")
          twoord.plot(lx = gRates$time,
                      ly = gRates$Dt,
@@ -350,7 +359,7 @@ ui <- fluidPage(
                sliderInput(
                   'interval',
                   "Averaging interval, min", 
-                  value = 1, min = 0.0, max = 60, step = 0.1
+                  value = 1, min = 0, max = 60, step = 1
                ),
                bsTooltip(
                   'interval',
@@ -363,7 +372,7 @@ ui <- fluidPage(
                selectInput('selectDataView', "Data to view", "OD680, AU")
             ),
             fluidRow(
-               selectInput('selectDataView2', "Additional data to view", "-")
+               selectInput('selectDataView2', "Additional data to view", "dO2")
             ),
             tags$hr(),
             fluidRow(
@@ -375,15 +384,26 @@ ui <- fluidPage(
             condition = 'input.conditionedSidePanels == 2',
             fluidRow(
                sliderInput(
-                  'lagTime',
-                  "Lag time, min", 
+                  'ignoredData',
+                  "Ignored Data, min", 
                   value = 5, min = 0, max = 30, step = 1
                ),
                bsTooltip(
-                  'lagTime',
-                  "Length of lag time that defines part of data that are influenced by the dilution. Provided in minutes.",
+                  'ignoredData',
+                  "Time interval that defines part of the data that are influenced just after a dilution. Provided in minutes.",
                   'right',
                   options = list(container = 'body')
+               ),
+               sliderInput(
+                 'acceptableR2',
+                 "Acceptable Coefficient of Determination", 
+                 value = 55, min = 25, max = 100, step = 5
+               ),
+               bsTooltip(
+                 'acceptableR2',
+                 "Filter the growth rates based on minimum R2 of the regression",
+                 'right',
+                 options = list(container = 'body')
                )
             ),
             tags$hr(),
@@ -396,6 +416,43 @@ ui <- fluidPage(
             tags$hr(),
             fluidRow(
                downloadButton('downloadAnalysis', "Download")
+            )
+         ),
+         conditionalPanel(
+            condition = 'input.conditionedSidePanels == 3',
+            fluidRow(
+               fileInput(
+                  'calibrationsFile',
+                  "Choose calibrations file to upload",
+                  accept = c(
+                     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                     '.xlsx'
+                  )
+               )
+            ),
+            fluidRow(
+               sliderInput(
+                  'interval',
+                  "Averaging interval, min", 
+                  value = 1, min = 0, max = 60, step = 1
+               ),
+               bsTooltip(
+                  'interval',
+                  "Interval that is used for lumping and averaging untidy data. Provided in minutes.",
+                  'right', options = list(container = 'body')
+               )
+            ),
+            tags$hr(),
+            fluidRow(
+               selectInput('selectDataView', "Data to view", "dO2")
+            ),
+            fluidRow(
+               selectInput('selectDataView2', "Additional data to view", "-")
+            ),
+            tags$hr(),
+            fluidRow(
+               downloadButton('downloadCalibrations', "Download"),
+               textOutput('downloadSizeCal')
             )
          ),
          width = 3
@@ -437,6 +494,27 @@ ui <- fluidPage(
                                 dblclick = 'dataProcessingPlot_dblClick',
                                 brush = brushOpts(
                                    id = 'dataProcessingPlot_brush',
+                                   resetOnNew = TRUE
+                                )
+                     )
+                  )
+               )
+            ),
+            tabPanel(
+               "Calibrations",
+               value = 3,
+               fluidRow(
+                  column(
+                     4,
+                     br(),
+                     DT::dataTableOutput('dataCalibrationsTable')
+                  ),
+                  column(
+                     8,
+                     plotOutput('dataCalibrationsPlot',   
+                                dblclick = 'dataCalibrationsPlot_dblClick',
+                                brush = brushOpts(
+                                   id = 'dataCalibrationsPlot_brush',
                                    resetOnNew = TRUE
                                 )
                      )
