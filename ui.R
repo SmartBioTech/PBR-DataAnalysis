@@ -37,11 +37,11 @@ shinyUI(fluidPage(
       ),
       conditionalPanel(condition = 'input.conditionedSidePanels == 2',
         fluidRow(
-          sliderInput( 'slider_dataGC_interval',
+          sliderInput( 'slider_dataAnalysisGC_interval',
             "Interval, min", 
             value = 60, min = 15, max = 600, step = 15
           ),
-          bsTooltip( 'slider_dataGC_interval',
+          bsTooltip( 'slider_dataAnalysisGC_interval',
             "Time interval for growth rate determination.",
             'right',
             options = list(container = 'body')
@@ -49,7 +49,7 @@ shinyUI(fluidPage(
         ),
         tags$hr(),
         fluidRow(
-          selectInput('select_dataGC_growthRates',
+          selectInput('select_dataAnalysisGC_growthRates',
             "Data for growth rates determination",
             c ("OD680, AU", "OD720, AU"),
             "OD680, AU"

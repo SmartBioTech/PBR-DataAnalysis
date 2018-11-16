@@ -290,7 +290,7 @@ shinyServer(function(input, output, session) {
   # Growth rates calculation
   growthRatesGC <- reactive({
     data <- dataProcessed_d()
-    columnName <- dataColumnNames$X[match(input$select_dataAnalysisTurbi_dilutionPump, dataColumnNames$Y)]
+    columnName <- dataColumnNames$X[match(input$select_dataAnalysisGC_growthRates, dataColumnNames$Y)]
     withProgress(
         message = "Calculating growth rates...",
         value = 0.0,
@@ -302,24 +302,24 @@ shinyServer(function(input, output, session) {
           Dt <- c()
           R2 <- c()
           incProgress(0.15)
-          data$group <- as.numeric(cut2(data$time, g = floor(max(data) / input$slider_dataGC_interval)))
-          # for (j in 1 :  max(data$group)) {
-          #     interval <- c((expFitStart[j] + floor(input$slider_dataAnalysisTurbi_ignored / input$slider_dataView_interval)) : expFitStop[j])
-          #     incProgress(0.15 + (j / length(expFitStart)) * 0.85)
-          #     if (length(interval) < 4) {
-          #       next
-          #     }
-          #     timeFit <- data$time[interval]
-          #     dataFit <- data[[dataColumnNames$X[match(input$select_dataAnalysisGC_growthRates, dataColumnNames$Y)]]][interval]
-          #     fit <- nls(dataFit ~ exp(a + b * timeFit),
-          #               start = list(a = 0, b = 0.1),
-          #               control = list(maxiter = 99, minFactor = 1/2048, warnOnly = TRUE))
-          #     time <- c(time, timeFit[length(timeFit)])
-          #     mu <- c(mu, coef(fit)[2] * 24)
-          #     Dt <- c(Dt, 1 / coef(fit)[2] * log(2))
-          #     R2 <- c(R2, cor(dataFit, predict(fit)))
-          # }
-        })
+          data$group <- as.numeric(cut2(data$time, g = floor(max(data$time) / (input$slider_dataAnalysisGC_interval / 60))))
+          for (j in 1 :  max(data$group)) {
+              incProgress((j / max(data$group)) * 0.85)
+              timeFit <- data$time[data$group %in% j]
+               if (length(timeFit) < 4) {
+                next
+              }
+              dataFit <- data[[dataColumnNames$X[match(input$select_dataAnalysisGC_growthRates, dataColumnNames$Y)]]][data$group %in% j]
+              fit <- nls(dataFit ~ exp(a + b * timeFit),
+                        start = list(a = 0, b = 0.1),
+                        control = list(maxiter = 99, minFactor = 1/2048, warnOnly = TRUE))
+              time <- c(time, timeFit[length(timeFit)])
+              mu <- c(mu, coef(fit)[2] * 24)
+              Dt <- c(Dt, 1 / coef(fit)[2] * log(2))
+              R2 <- c(R2, cor(dataFit, predict(fit)))
+          }
+        }
+      )
     return(data.frame(time, mu, Dt, R2))
   })
   growthRatesTurbi <- reactive({
@@ -477,15 +477,37 @@ shinyServer(function(input, output, session) {
   # https://rstudio.github.io/DT/options.html
   # https://datatables.net/reference/option/dom
   output$dataAnalysisGCTable <- DT::renderDataTable({
-    if (!is.null(dataProcessed())) {
-
+    if (!is.null(growthRatesGC())) {
+      datatable(growthRatesGC() %>% filter(R2 >= (input$slider_dataAnalysisTurbi_acceptableR2 / 100)), options = list(dom = 'tlp', pageLength = 8, lengthChange = FALSE, searching = FALSE)) %>% formatRound(c('time', 'mu', 'Dt', 'R2'), digits = 2)
     }
   }, server = FALSE)
   output$dataAnalysisGCPlot <- renderPlot({
-    if (!is.null(dataProcessed())) {
-      
+    if (!is.null(growthRatesGC())) {
+      gRates <- growthRatesGC() %>% filter(R2 >= (input$slider_dataAnalysisTurbi_acceptableR2 / 100))
+      if (dim(gRates)[1] > 0) {
+        s1 = NULL
+        s2 = input$dataAnalysisGCTable_rows_selected
+        twoord.plot(lx = gRates$time,
+          ly = gRates$Dt,
+          rx = gRates$time,
+          ry = gRates$mu,
+          xlim = rangesAnalysisGC$x,
+          lylim = rangesAnalysisGC$y,
+          # rylim = y2lim,
+          xlab = "Experiment duration, h",
+          ylab = "Doubling time, h",
+          rylab = "Specific growth rate, 1/day",
+          rcol = 3,
+          rpch = 1)
+        if (length(s1)) {
+          points(gRates[s1, , drop = FALSE], pch = 19, cex = 1, col = 'green')
+        }
+        if (length(s2)) {
+          points(gRates$time[s2], gRates$Dt[s2], pch = 19, cex = 1.25)
+        }
     }
-  })
+  }
+})
   output$dataAnalysisTurbiTable <- DT::renderDataTable({
     if (!is.null(growthRatesTurbi())) {
       datatable(growthRatesTurbi() %>% filter(R2 >= (input$slider_dataAnalysisTurbi_acceptableR2 / 100)), options = list(dom = 'tlp', pageLength = 8, lengthChange = FALSE, searching = FALSE)) %>% formatRound(c('time', 'mu', 'Dt', 'R2'), digits = 2)
