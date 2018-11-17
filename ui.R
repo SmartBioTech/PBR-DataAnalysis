@@ -172,18 +172,23 @@ shinyUI(fluidPage(
           )
         ),
         fluidRow(
-          sliderInput( 'slider_calibration_interval',
+          sliderInput( 'slider_dataCalibration_interval',
             "Averaging interval, min", 
-            value = 1, min = 0, max = 60, step = 1
+            value = 30, min = 15, max = 240, step = 15
           ),
-          bsTooltip( 'slider_calibration_interval',
+          bsTooltip( 'slider_dataCalibration_interval',
             "Interval that is used for lumping and averaging untidy data. Provided in minutes.",
             'right', options = list(container = 'body')
+          ),
+          sliderInput( 'slider_dataCalibration_acceptableSlope',
+            "Acceptable stabilization slope", 
+            value = 5, min = 0, max = 10, step = 1
           )
         ),
+        
         tags$hr(),
         fluidRow(
-          selectInput('select_calibration_view',
+          selectInput('select_dataCalibration_series',
             "Data to view",
             "dO2"
           )
@@ -221,12 +226,12 @@ shinyUI(fluidPage(
             ),
             column(
               8,
-              plotOutput('dataAnalysisGCPlot'   
-                # dblclick = 'dataAnalysisGC_dblClick',
-                # brush = brushOpts(
-                #   id = 'dataAnalysisGC_brush',
-                #   resetOnNew = TRUE
-                # )
+              plotOutput('dataAnalysisGCPlot' ,  
+                dblclick = 'dataAnalysisGCPlot_dblClick',
+                brush = brushOpts(
+                  id = 'dataAnalysisGCPlot_brush',
+                  resetOnNew = TRUE
+                )
               )
             )
           )
@@ -256,11 +261,6 @@ shinyUI(fluidPage(
           fluidRow(
             plotlyOutput('dataAnalysisPeriodicPlot',
               width = '90%'
-              # dblclick = 'dataAnalysisPeriodicPlot_dblClick',
-              # brush = brushOpts(
-              #  id = 'dataAnalysisPeriodicPlot_brush',
-              #   resetOnNew = TRUE
-              # )
             )
           )
         ),
@@ -274,12 +274,12 @@ shinyUI(fluidPage(
             ),
             column(
               8,
-              plotOutput('dataCalibrationsPlot'   
-                # dblclick = 'dataCalibrationsPlot_dblClick',
-                # brush = brushOpts(
-                #     id = 'dataCalibrationsPlot_brush',
-                #     resetOnNew = TRUE
-                # )
+              plotOutput('dataCalibrationsPlot' , 
+                dblclick = 'dataCalibrationsPlot_dblClick',
+                brush = brushOpts(
+                    id = 'dataCalibrationsPlot_brush',
+                    resetOnNew = TRUE
+                )
               )
             )
           )

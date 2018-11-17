@@ -2,6 +2,7 @@ shinyServer(function(input, output, session) {
   rangesView <- reactiveValues(x = NULL, y = NULL)
   rangesAnalysisGC <- reactiveValues(x = NULL, y = NULL)
   rangesAnalysisTurbi <- reactiveValues(x = NULL, y = NULL)
+  rangesCalibrations <-  reactiveValues(x = NULL, y = NULL)
   #  observeEvent(input$regSend, {
   #     source('dbRegister.R', local = TRUE, echo = FALSE)
   #     updateActionButton(
@@ -12,43 +13,52 @@ shinyServer(function(input, output, session) {
   #   ignoreNULL = TRUE
   #  )
   observeEvent(input$dataViewPlot_dblClick, {
-      brush <- input$dataViewPlot_brush
-      if (!is.null(brush)) {
-        rangesView$x <- c(brush$xmin, brush$xmax)
-        rangesView$y <- c(brush$ymin, brush$ymax)
-        output$downloadSize <- renderText({
-          paste0("Data time range reduced to: ", floor(rangesView$x[1]), " to ", ceiling(rangesView$x[2]), " h")
-        })
-      } else {
-        rangesView$x <- NULL
-        rangesView$y <- NULL
-        output$downloadSize <- renderText({ paste0("") })
-      }
+    brush <- input$dataViewPlot_brush
+    if (!is.null(brush)) {
+      rangesView$x <- c(brush$xmin, brush$xmax)
+      rangesView$y <- c(brush$ymin, brush$ymax)
+      output$downloadSize <- renderText({
+        paste0("Data time range reduced to: ", floor(rangesView$x[1]), " to ", ceiling(rangesView$x[2]), " h")
+      })
+    } else {
+      rangesView$x <- NULL
+      rangesView$y <- NULL
+      output$downloadSize <- renderText({ paste0("") })
+    }
   })
   observeEvent(input$dataAnalysisGCPlot_dblClick, {
-      brush <- input$dataAnalysisGCPlot_brush
-      if (!is.null(brush)) {
-        rangesAnalysisGC$x <- c(brush$xmin, brush$xmax)
-        rangesAnalysisGC$y <- c(brush$ymin, brush$ymax)
-      } else {
-        rangesAnalysisGC$x <- NULL
-        rangesAnalysisGC$y <- NULL
-      }
+    brush <- input$dataAnalysisGCPlot_brush
+    if (!is.null(brush)) {
+      rangesAnalysisGC$x <- c(brush$xmin, brush$xmax)
+      rangesAnalysisGC$y <- c(brush$ymin, brush$ymax)
+    } else {
+      rangesAnalysisGC$x <- NULL
+      rangesAnalysisGC$y <- NULL
+    }
   })
   observeEvent(input$dataAnalysisTurbiPlot_dblClick, {
-      brush <- input$dataAnalysisTurbiPlot_brush
-      if (!is.null(brush)) {
-        rangesAnalysisTurbi$x <- c(brush$xmin, brush$xmax)
-        rangesAnalysisTurbi$y <- c(brush$ymin, brush$ymax)
-      } else {
-        rangesAnalysisTurbi$x <- NULL
-        rangesAnalysisTurbi$y <- NULL
-      }
+    brush <- input$dataAnalysisTurbiPlot_brush
+    if (!is.null(brush)) {
+      rangesAnalysisTurbi$x <- c(brush$xmin, brush$xmax)
+      rangesAnalysisTurbi$y <- c(brush$ymin, brush$ymax)
+    } else {
+      rangesAnalysisTurbi$x <- NULL
+      rangesAnalysisTurbi$y <- NULL
+    }
+  })
+  observeEvent(input$dataCalibrationsPlot_dblClick, {
+    brush <- input$dataCalibrationsPlot_brush
+    if (!is.null(brush)) {
+      rangesCalibrations$x <- c(brush$xmin, brush$xmax)
+      rangesCalibrations$y <- c(brush$ymin, brush$ymax)
+    } else {
+      rangesCalibrations$x <- NULL
+      rangesCalibrations$y <- NULL
+    }
   })
   observeEvent(input$slider_dataAnalysisPeriodic_period, {
     isolate(updateCheckboxInput(session,  'checkbox_dataAnalysisPeriodic_searchPeriod', value = FALSE))
   })
-  
   # File processing ====
   # Upload
   dataInput <- reactive({
@@ -309,7 +319,7 @@ shinyServer(function(input, output, session) {
                if (length(timeFit) < 4) {
                 next
               }
-              dataFit <- data[[dataColumnNames$X[match(input$select_dataAnalysisGC_growthRates, dataColumnNames$Y)]]][data$group %in% j]
+              dataFit <- data[[columnName]][data$group %in% j]
               fit <- nls(dataFit ~ exp(a + b * timeFit),
                         start = list(a = 0, b = 0.1),
                         control = list(maxiter = 99, minFactor = 1/2048, warnOnly = TRUE))
@@ -383,7 +393,7 @@ shinyServer(function(input, output, session) {
           yvalues <- yvalues[[1]][!yvalues[[1]] %in% bp$out]
           bp <- boxplot(yvalues)
           out <- tryCatch({
-            # TODO need to be replaced with an empty object initialization and evaluated as a part of for cycle
+            # TODO need to be replaced with an empty object initialization and evaluated as a part of FOR cycle
             model_final <- nls(yvalues ~ b1 + a1 * sin(2 * pi * (xvalues - d1) / tau), start = list(a1 = ((bp$stats[5] - bp$stats[1]) / 2), b1 = bp$stats[3], tau = input$slider_dataAnalysisPeriodic_period, d1 = 0), control = list(warnOnly = TRUE))
             incProgress(0.1)
             periodTestSet <- seq(from = floor(input$slider_dataAnalysisPeriodic_period * 2 / 3), to = ceiling(input$slider_dataAnalysisPeriodic_period * 3 / 2), by = round(input$slider_dataAnalysisPeriodic_period / 6, digits = 0))
@@ -412,6 +422,35 @@ shinyServer(function(input, output, session) {
     periodicData$time <- round(((periodicData$time - input$slider_dataAnalysisPeriodic_startTime + input$slider_dataAnalysisPeriodic_shift) %% input$slider_dataAnalysisPeriodic_period) / factor) * factor
     averagedData <- periodicData %>% group_by(time) %>% summarize_all(funs(mean, sd), na.rm = TRUE)
     return(averagedData)
+  })
+  calibrationStability <- reactive({
+    data <- dataProcessed_d()
+    columnName <- dataColumnNames$X[match(input$select_dataCalibration_series, dataColumnNames$Y)]
+    withProgress(
+        message = "Checking stabilization ...",
+        value = 0.0,
+        {
+          time <- c()
+          parameter <- c()
+          slope <- c()
+          R2 <- c()
+          incProgress(0.15)
+          data$group <- as.numeric(cut2(data$time, g = floor(max(data$time) / (input$slider_dataCalibration_interval / 60))))
+          for (j in 1 :  max(data$group)) {
+              incProgress((j / max(data$group)) * 0.75)
+              dataFit <- data[data$group %in% j, ]
+               if (dim(data)[1] < 4) {
+                next
+              }
+              fit <- lm(probes.o2 ~  time, data = dataFit)
+              time <- c(time, dataFit$time[dim(dataFit)[1]])
+              parameter <- c(parameter, as.numeric(names(sort(table(dataFit$`thermo.thermo-reg`),decreasing=TRUE)[1])))
+              slope <- c(slope, coef(fit)[2])
+              R2 <- c(R2, summary(fit)$r.squared)
+          }
+        }
+      )
+    return(data.frame(time, parameter, slope, R2))
   })
   # Outputs hadling ====
   output$fileName <- renderText({
@@ -573,4 +612,36 @@ shinyServer(function(input, output, session) {
       )
     }
   })
+  output$dataCalibrationsTable <- DT::renderDataTable({
+    if (!is.null(calibrationStability())) {
+      datatable(calibrationStability() %>% filter(abs(slope) <= (input$slider_dataCalibration_acceptableSlope)), options = list(dom = 'tlp', pageLength = 8, lengthChange = FALSE, searching = FALSE)) %>% formatRound(c('time', 'parameter', 'slope', 'R2'), digits = 2)
+    }
+  }, server = FALSE)
+  output$dataCalibrationsPlot <- renderPlot({
+    if (!is.null(calibrationStability())) {
+      gRates <- calibrationStability() %>% filter(abs(slope) <= (input$slider_dataCalibration_acceptableSlope))
+      if (dim(gRates)[1] > 0) {
+        s1 = NULL
+        s2 = input$dataCalibrationsTable_rows_selected
+        twoord.plot(lx = gRates$time,
+          ly = gRates$slope,
+          rx = gRates$time,
+          ry = gRates$parameter,
+          xlim = rangesCalibrations$x,
+          lylim = rangesCalibrations$y,
+          # rylim = y2lim,
+          xlab = "Experiment duration, h",
+          ylab = "Slope, signal/h",
+          rylab = "Parameter",
+          rcol = 3,
+          rpch = 1)
+        if (length(s1)) {
+          points(gRates[s1, , drop = FALSE], pch = 19, cex = 1, col = 'green')
+        }
+        if (length(s2)) {
+          points(gRates$time[s2], gRates$slope[s2], pch = 19, cex = 1.25)
+        }
+    }
+  }
+})
 })
