@@ -5,6 +5,7 @@ library(openxlsx)
 library(plotrix)
 library(shiny)
 library(shinyBS)
+library(shinythemes)
 library(plotly)
 
 options(shiny.maxRequestSize = 12 * 1024 ^ 2)

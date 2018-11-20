@@ -1,6 +1,7 @@
 shinyUI(fluidPage(
   tags$head(includeScript('google-analytics.js')),
   titlePanel("", windowTitle = "PBR Data Analysis"),
+  theme = shinytheme('spacelab'),
   sidebarLayout(
     # UI - Sidebar panel ====
     sidebarPanel(
