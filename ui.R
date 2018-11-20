@@ -283,6 +283,16 @@ shinyUI(fluidPage(
                 )
               )
             )
+          ),
+          fluidRow(
+            column(
+              4,
+              br()
+            ),
+            column(
+              8,
+              plotOutput('dataCalibrationsFitPlot')
+            )
           )
         ),
         id = 'conditionedSidePanels',

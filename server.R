@@ -432,6 +432,7 @@ shinyServer(function(input, output, session) {
         {
           time <- c()
           parameter <- c()
+          value <- c()
           slope <- c()
           R2 <- c()
           incProgress(0.15)
@@ -445,12 +446,17 @@ shinyServer(function(input, output, session) {
               fit <- lm(probes.o2 ~  time, data = dataFit)
               time <- c(time, dataFit$time[dim(dataFit)[1]])
               parameter <- c(parameter, as.numeric(names(sort(table(dataFit$`thermo.thermo-reg`),decreasing=TRUE)[1])))
+              value <- c(value, mean(dataFit$`probes.o2`))
               slope <- c(slope, coef(fit)[2])
               R2 <- c(R2, summary(fit)$r.squared)
           }
         }
       )
-    return(data.frame(time, parameter, slope, R2))
+    return(data.frame(time, parameter, value, slope, R2))
+  })
+  calibrationFit <- reactive({
+    stablizedCalibration <-  calibrationStability() %>%  filter(abs(slope) <= 5) %>% group_by(parameter) %>% summarize_all(mean) %>% arrange(parameter)
+    return(stablizedCalibration)
   })
   # Outputs hadling ====
   output$fileName <- renderText({
@@ -544,9 +550,9 @@ shinyServer(function(input, output, session) {
         if (length(s2)) {
           points(gRates$time[s2], gRates$Dt[s2], pch = 19, cex = 1.25)
         }
+      } 
     }
-  }
-})
+  })
   output$dataAnalysisTurbiTable <- DT::renderDataTable({
     if (!is.null(growthRatesTurbi())) {
       datatable(growthRatesTurbi() %>% filter(R2 >= (input$slider_dataAnalysisTurbi_acceptableR2 / 100)), options = list(dom = 'tlp', pageLength = 8, lengthChange = FALSE, searching = FALSE)) %>% formatRound(c('time', 'mu', 'Dt', 'R2'), digits = 2)
@@ -614,7 +620,7 @@ shinyServer(function(input, output, session) {
   })
   output$dataCalibrationsTable <- DT::renderDataTable({
     if (!is.null(calibrationStability())) {
-      datatable(calibrationStability() %>% filter(abs(slope) <= (input$slider_dataCalibration_acceptableSlope)), options = list(dom = 'tlp', pageLength = 8, lengthChange = FALSE, searching = FALSE)) %>% formatRound(c('time', 'parameter', 'slope', 'R2'), digits = 2)
+      datatable(calibrationStability() %>% filter(abs(slope) <= (input$slider_dataCalibration_acceptableSlope)), options = list(dom = 'tlp', pageLength = 8, lengthChange = FALSE, searching = FALSE)) %>% formatRound(c('time', 'parameter', 'value', 'slope', 'R2'), digits = 2)
     }
   }, server = FALSE)
   output$dataCalibrationsPlot <- renderPlot({
@@ -641,7 +647,13 @@ shinyServer(function(input, output, session) {
         if (length(s2)) {
           points(gRates$time[s2], gRates$slope[s2], pch = 19, cex = 1.25)
         }
+      }
     }
-  }
-})
+  })
+  output$dataCalibrationsFitPlot <- renderPlot({
+    plot(calibrationFit()$parameter, calibrationFit()$value, type = "p")
+    fit <- lm(value ~  parameter, data = calibrationFit())
+    # TODO adjust newdata definition
+    lines(x = calibrationFit()$parameter, y = predict(fit, parameter = calibrationFit()$parameter))
+  })
 })
