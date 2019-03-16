@@ -83,7 +83,7 @@ shinyServer(function(input, output, session) {
     }
     pumpsAvailable <- c("Pump 0", "Pump 3", "Pump 4", "Pump 5", "Pump 6", "Pump 7")
     selectChoices <- merge(data.frame(X = colnames(untidyData)), dataColumnNames)
-    pA <- pumpsAvailable[max(which(!is.na(match(pumpsAvailable, selectChoices$Y))))]
+    pA <- pumpsAvailable[which(!is.na(match(pumpsAvailable, selectChoices$Y)))]
     if (is.na(pA)) {
       hideTab(inputId = 'conditionedSidePanels', target = "Data Analysis - Turbidostat")
     } else {
@@ -311,15 +311,17 @@ shinyServer(function(input, output, session) {
           mu <- c()
           Dt <- c()
           R2 <- c()
-          incProgress(0.15)
           data$group <- as.numeric(cut2(data$time, g = floor(max(data$time) / (input$slider_dataAnalysisGC_interval / 60))))
           for (j in 1 :  max(data$group)) {
-              incProgress((j / max(data$group)) * 0.85)
+              incProgress(j / max(data$group)) 
               timeFit <- data$time[data$group %in% j]
                if (length(timeFit) < 4) {
                 next
               }
               dataFit <- data[[columnName]][data$group %in% j]
+              if (length(dataFit[!is.na(dataFit)]) < length(timeFit)) {
+                next()
+              }
               fit <- nls(dataFit ~ exp(a + b * timeFit),
                         start = list(a = 0, b = 0.1),
                         control = list(maxiter = 99, minFactor = 1/2048, warnOnly = TRUE))
@@ -357,10 +359,9 @@ shinyServer(function(input, output, session) {
               if (data[[columnName]][pumpOn[i] - 1] == 0) expFitStop <- c(expFitStop, pumpOn[i])
               else if (data[[columnName]][pumpOn[i] + 1] == 0) expFitStart <- c(expFitStart, pumpOn[i] + 1)
           }
-          incProgress(0.15)
           for (j in 1 : length(expFitStart)) {
               interval <- c((expFitStart[j] + floor(input$slider_dataAnalysisTurbi_ignored / input$slider_dataView_interval)) : expFitStop[j])
-              incProgress(0.15 + (j / length(expFitStart)) * 0.85)
+              incProgress(j / length(expFitStart))
               if (length(interval) < 4) {
                 next
               }
@@ -378,54 +379,58 @@ shinyServer(function(input, output, session) {
     return(data.frame(time, mu, Dt, R2))
   })
   dataPeriodic <- reactive({
-    factor <- input$slider_dataView_interval / 60
-    periodicData <- subset(dataProcessed_d(), ((time > input$slider_dataAnalysisPeriodic_startTime + input$slider_dataAnalysisPeriodic_shift) & (time < (input$slider_dataAnalysisPeriodic_startTime + input$slider_dataAnalysisPeriodic_shift + input$slider_dataAnalysisPeriodic_period * input$slider_dataAnalysisPeriodic_noPeriods))))
-    # period determination
-    if (input$checkbox_dataAnalysisPeriodic_searchPeriod) {
-      withProgress(
-        message = "Identifying the period ...",
-        value = 0.0,
-        {
-          yvalues <- periodicData[dataColumnNames$X[match(input$select_dataAnalysisPeriodic_dataSeries, dataColumnNames$Y)]]
-          xvalues <- periodicData$time
-          bp <- boxplot(yvalues)
-          xvalues <- xvalues[!yvalues[[1]] %in% bp$out]
-          yvalues <- yvalues[[1]][!yvalues[[1]] %in% bp$out]
-          bp <- boxplot(yvalues)
-          out <- tryCatch({
-            # TODO need to be replaced with an empty object initialization and evaluated as a part of FOR cycle
-            model_final <- nls(yvalues ~ b1 + a1 * sin(2 * pi * (xvalues - d1) / tau), start = list(a1 = ((bp$stats[5] - bp$stats[1]) / 2), b1 = bp$stats[3], tau = input$slider_dataAnalysisPeriodic_period, d1 = 0), control = list(warnOnly = TRUE))
-            incProgress(0.1)
-            periodTestSet <- seq(from = floor(input$slider_dataAnalysisPeriodic_period * 2 / 3), to = ceiling(input$slider_dataAnalysisPeriodic_period * 3 / 2), by = round(input$slider_dataAnalysisPeriodic_period / 6, digits = 0))
-            for (i in periodTestSet) {
-              model <- nls(yvalues ~ b1 + a1 * sin(2 * pi * (xvalues - d1) / tau), start = list(a1 = ((bp$stats[5] - bp$stats[1]) / 2), b1 = bp$stats[3], tau = i, d1 = 0), control = list(warnOnly = TRUE))
-              incProgress(0.9 / length(periodTestSet))
-              if (summary(model_final)$sigma > summary(model)$sigma) {
-                model_final <- model
-              }
+    withProgress(
+      message = "Processing periodic data...",
+      value = 0.3,
+      {
+        factor <- input$slider_dataView_interval / 60
+        periodicData <- subset(dataProcessed_d(), ((time > input$slider_dataAnalysisPeriodic_startTime + input$slider_dataAnalysisPeriodic_shift) & (time < (input$slider_dataAnalysisPeriodic_startTime + input$slider_dataAnalysisPeriodic_shift + input$slider_dataAnalysisPeriodic_period * input$slider_dataAnalysisPeriodic_noPeriods))))
+        incProgress(0.3)
+        # period determination
+        if (input$checkbox_dataAnalysisPeriodic_searchPeriod) {
+          withProgress(
+            message = "Identifying the period ...",
+            value = 0.3,
+            {
+              yvalues <- periodicData[dataColumnNames$X[match(input$select_dataAnalysisPeriodic_dataSeries, dataColumnNames$Y)]]
+              xvalues <- periodicData$time
+              bp <- boxplot(yvalues)
+              xvalues <- xvalues[!yvalues[[1]] %in% bp$out]
+              yvalues <- yvalues[[1]][!yvalues[[1]] %in% bp$out]
+              bp <- boxplot(yvalues)
+              incProgress(0.4)
+              out <- tryCatch({
+                # TODO need to be replaced with an empty object initialization and evaluated as a part of FOR cycle
+                model_final <- nls(yvalues ~ b1 + a1 * sin(2 * pi * (xvalues - d1) / tau), start = list(a1 = ((bp$stats[5] - bp$stats[1]) / 2), b1 = bp$stats[3], tau = input$slider_dataAnalysisPeriodic_period, d1 = 0), control = list(warnOnly = TRUE))
+                incProgress(0.1)
+                periodTestSet <- seq(from = floor(input$slider_dataAnalysisPeriodic_period * 2 / 3), to = ceiling(input$slider_dataAnalysisPeriodic_period * 3 / 2), by = round(input$slider_dataAnalysisPeriodic_period / 6, digits = 0))
+                for (i in periodTestSet) {
+                  model <- nls(yvalues ~ b1 + a1 * sin(2 * pi * (xvalues - d1) / tau), start = list(a1 = ((bp$stats[5] - bp$stats[1]) / 2), b1 = bp$stats[3], tau = i, d1 = 0), control = list(warnOnly = TRUE))
+                  incProgress(0.9 / length(periodTestSet))
+                  if (summary(model_final)$sigma > summary(model)$sigma) {
+                    model_final <- model
+                  }
+                }
+              },
+              error = function(cond) {
+                message(cond)
+                # Choose a return value in case of error
+                return(NULL)
+              },
+              warning = function(cond) {
+                message(cond)
+                # Choose a return value in case of warning
+                return(NULL)
+              })
+            isolate(updateSliderInput(session, 'slider_dataAnalysisPeriodic_period', value = as.numeric(coef(model_final)['tau']), step = 0.1))
             }
-          },
-          error = function(cond) {
-            message(cond)
-            # Choose a return value in case of error
-            return(NULL)
-          },
-          warning = function(cond) {
-            message(cond)
-            # Choose a return value in case of warning
-            return(NULL)
-          })
+          )
         }
-      )
-      isolate(updateSliderInput(session, 'slider_dataAnalysisPeriodic_period', value = as.numeric(coef(model_final)['tau']), step = 0.1))
-    }
-    # reative time column duplication
-    relTime <- periodicData$time
-    periodicData$time <- round(((periodicData$time - input$slider_dataAnalysisPeriodic_startTime + input$slider_dataAnalysisPeriodic_shift) %% input$slider_dataAnalysisPeriodic_period) / factor) * factor
-    extendedData <- periodicData
-    extendedData$time_rel <- relTime
-    saveRDS(extendedData, file = 'extendedData.rds')
-    averagedData <- periodicData %>% group_by(time) %>% summarize_all(funs(mean, sd), na.rm = TRUE)
+        periodicData$time <- round(((periodicData$time - input$slider_dataAnalysisPeriodic_startTime + input$slider_dataAnalysisPeriodic_shift) %% input$slider_dataAnalysisPeriodic_period) / factor) * factor
+        averagedData <- periodicData %>% group_by(time) %>% summarize_all(funs(mean, sd), na.rm = TRUE)
+        incProgress(0.4)
+      }
+    )
     return(averagedData)
   })
   calibrationStability <- reactive({
@@ -440,10 +445,9 @@ shinyServer(function(input, output, session) {
           value <- c()
           slope <- c()
           R2 <- c()
-          incProgress(0.15)
           data$group <- as.numeric(cut2(data$time, g = floor(max(data$time) / (input$slider_dataCalibration_interval / 60))))
           for (j in 1 :  max(data$group)) {
-              incProgress((j / max(data$group)) * 0.75)
+              incProgress(j / max(data$group))
               dataFit <- data[data$group %in% j, ]
                if (dim(data)[1] < 4) {
                 next
@@ -490,39 +494,46 @@ shinyServer(function(input, output, session) {
   })
   output$dataViewPlot <- renderPlot({
     data <- dataProcessed()
-    if (!is.null(data)) {
-      if(input$select_dataView_plotSeriesAdd == "" || input$select_dataView_plotSeriesAdd == "-") {
-        plot(x = data$time,
-          y = data[[dataColumnNames$X[match(input$select_dataView_plotSeries, dataColumnNames$Y)]]],
-          xlim = rangesView$x,
-          ylim = rangesView$y,
-          xlab = 'Experiment duration, h',
-          ylab = input$select_dataView_plotSeries)
-      } else {
-        if (!is.null(rangesView$y)) {
-          ymin = min(data[[dataColumnNames$X[match(input$select_dataView_plotSeries, dataColumnNames$Y)]]], na.rm = TRUE)
-          ymax = max(data[[dataColumnNames$X[match(input$select_dataView_plotSeries, dataColumnNames$Y)]]], na.rm = TRUE)
-          y2min = min(data[[dataColumnNames$X[match(input$select_dataView_plotSeriesAdd, dataColumnNames$Y)]]], na.rm = TRUE)
-          y2max = max(data[[dataColumnNames$X[match(input$select_dataView_plotSeriesAdd, dataColumnNames$Y)]]], na.rm = TRUE)
-          y2lim <- c((rangesView$y[1] - ymin) / (ymax - ymin) * (y2max - y2min) + y2min, y2max - (ymax - rangesView$y[2]) / (ymax - ymin) * (y2max - y2min))
-        } else {
-          y2lim <- NULL
+    withProgress(
+      message = "Plotting graph...",
+      value = 0.4,
+      {
+        if (!is.null(data)) {
+          if(input$select_dataView_plotSeriesAdd == "" || input$select_dataView_plotSeriesAdd == "-") {
+            plot(x = data$time,
+              y = data[[dataColumnNames$X[match(input$select_dataView_plotSeries, dataColumnNames$Y)]]],
+              xlim = rangesView$x,
+              ylim = rangesView$y,
+              xlab = 'Experiment duration, h',
+              ylab = input$select_dataView_plotSeries)
+          } else {
+            if (!is.null(rangesView$y)) {
+              ymin = min(data[[dataColumnNames$X[match(input$select_dataView_plotSeries, dataColumnNames$Y)]]], na.rm = TRUE)
+              ymax = max(data[[dataColumnNames$X[match(input$select_dataView_plotSeries, dataColumnNames$Y)]]], na.rm = TRUE)
+              y2min = min(data[[dataColumnNames$X[match(input$select_dataView_plotSeriesAdd, dataColumnNames$Y)]]], na.rm = TRUE)
+              y2max = max(data[[dataColumnNames$X[match(input$select_dataView_plotSeriesAdd, dataColumnNames$Y)]]], na.rm = TRUE)
+              y2lim <- c((rangesView$y[1] - ymin) / (ymax - ymin) * (y2max - y2min) + y2min, y2max - (ymax - rangesView$y[2]) / (ymax - ymin) * (y2max - y2min))
+            } else {
+              y2lim <- NULL
+            }
+            incProgress(0.4)
+            twoord.plot(
+              lx = data$time,
+              ly = data[[dataColumnNames$X[match(input$select_dataView_plotSeries, dataColumnNames$Y)]]],
+              rx = data$time,
+              ry = data[[dataColumnNames$X[match(input$select_dataView_plotSeriesAdd, dataColumnNames$Y)]]],
+              xlim = rangesView$x,
+              lylim = rangesView$y,
+              rylim = y2lim,
+              xlab = 'Experiment duration, h',
+              ylab = input$select_dataView_plotSeries,
+              rylab = input$select_dataView_plotSeriesAdd,
+              rcol = 3,
+              rpch = 1)
+          }
         }
-        twoord.plot(
-          lx = data$time,
-          ly = data[[dataColumnNames$X[match(input$select_dataView_plotSeries, dataColumnNames$Y)]]],
-          rx = data$time,
-          ry = data[[dataColumnNames$X[match(input$select_dataView_plotSeriesAdd, dataColumnNames$Y)]]],
-          xlim = rangesView$x,
-          lylim = rangesView$y,
-          rylim = y2lim,
-          xlab = 'Experiment duration, h',
-          ylab = input$select_dataView_plotSeries,
-          rylab = input$select_dataView_plotSeriesAdd,
-          rcol = 3,
-          rpch = 1)
-       }
-    }
+      }
+    )
   })
   # https://rstudio.github.io/DT/options.html
   # https://datatables.net/reference/option/dom
@@ -533,29 +544,36 @@ shinyServer(function(input, output, session) {
   }, server = FALSE)
   output$dataAnalysisGCPlot <- renderPlot({
     if (!is.null(growthRatesGC())) {
-      gRates <- growthRatesGC() %>% filter(R2 >= (input$slider_dataAnalysisTurbi_acceptableR2 / 100))
-      if (dim(gRates)[1] > 0) {
-        s1 = NULL
-        s2 = input$dataAnalysisGCTable_rows_selected
-        twoord.plot(lx = gRates$time,
-          ly = gRates$Dt,
-          rx = gRates$time,
-          ry = gRates$mu,
-          xlim = rangesAnalysisGC$x,
-          lylim = rangesAnalysisGC$y,
-          # rylim = y2lim,
-          xlab = "Experiment duration, h",
-          ylab = "Doubling time, h",
-          rylab = "Specific growth rate, 1/day",
-          rcol = 3,
-          rpch = 1)
-        if (length(s1)) {
-          points(gRates[s1, , drop = FALSE], pch = 19, cex = 1, col = 'green')
-        }
-        if (length(s2)) {
-          points(gRates$time[s2], gRates$Dt[s2], pch = 19, cex = 1.25)
-        }
-      } 
+       withProgress(
+        message = "Plotting graph...",
+        value = 0.4,
+        {
+          gRates <- growthRatesGC() %>% filter(R2 >= (input$slider_dataAnalysisTurbi_acceptableR2 / 100))
+          if (dim(gRates)[1] > 0) {
+            s1 = NULL
+            s2 = input$dataAnalysisGCTable_rows_selected
+            twoord.plot(lx = gRates$time,
+              ly = gRates$Dt,
+              rx = gRates$time,
+              ry = gRates$mu,
+              xlim = rangesAnalysisGC$x,
+              lylim = rangesAnalysisGC$y,
+              # rylim = y2lim,
+              xlab = "Experiment duration, h",
+              ylab = "Doubling time, h",
+              rylab = "Specific growth rate, 1/day",
+              rcol = 3,
+              rpch = 1)
+              incProgress(0,3)
+            if (length(s1)) {
+              points(gRates[s1, , drop = FALSE], pch = 19, cex = 1, col = 'green')
+            }
+            if (length(s2)) {
+              points(gRates$time[s2], gRates$Dt[s2], pch = 19, cex = 1.25)
+            }
+          }
+        } 
+      )
     }
   })
   output$dataAnalysisTurbiTable <- DT::renderDataTable({
@@ -565,30 +583,37 @@ shinyServer(function(input, output, session) {
   }, server = FALSE)
   output$dataAnalysisTurbiPlot <- renderPlot({
     if (!is.null(growthRatesTurbi())) {
-      s1 = NULL
-      s2 = input$dataAnalysisTurbiTable_rows_selected
-      gRates <- growthRatesTurbi() %>% filter(R2 >= (input$slider_dataAnalysisTurbi_acceptableR2 / 100))
-      # plot(x = gRates$time, y = gRates$Dt, xlim = rangesAnalysisTurbi$x, ylim = rangesAnalysisTurbi$y, xlab = "Experiment duration, h", ylab = "Doubling time, h")
-      if (dim(gRates)[1] > 0) {
-        twoord.plot(lx = gRates$time,
-          ly = gRates$Dt,
-          rx = gRates$time,
-          ry = gRates$mu,
-          xlim = rangesAnalysisTurbi$x,
-          lylim = rangesAnalysisTurbi$y,
-          # rylim = y2lim,
-          xlab = "Experiment duration, h",
-          ylab = "Doubling time, h",
-          rylab = "Specific growth rate, 1/day",
-          rcol = 3,
-          rpch = 1)
-        if (length(s1)) {
-          points(gRates[s1, , drop = FALSE], pch = 19, cex = 1, col = 'green')
+       withProgress(
+        message = "Plotting graph...",
+        value = 0.4,
+        {
+          s1 = NULL
+          s2 = input$dataAnalysisTurbiTable_rows_selected
+          gRates <- growthRatesTurbi() %>% filter(R2 >= (input$slider_dataAnalysisTurbi_acceptableR2 / 100))
+          # plot(x = gRates$time, y = gRates$Dt, xlim = rangesAnalysisTurbi$x, ylim = rangesAnalysisTurbi$y, xlab = "Experiment duration, h", ylab = "Doubling time, h")
+          if (dim(gRates)[1] > 0) {
+            twoord.plot(lx = gRates$time,
+              ly = gRates$Dt,
+              rx = gRates$time,
+              ry = gRates$mu,
+              xlim = rangesAnalysisTurbi$x,
+              lylim = rangesAnalysisTurbi$y,
+              # rylim = y2lim,
+              xlab = "Experiment duration, h",
+              ylab = "Doubling time, h",
+              rylab = "Specific growth rate, 1/day",
+              rcol = 3,
+              rpch = 1)
+              incProgress(0.3)
+            if (length(s1)) {
+              points(gRates[s1, , drop = FALSE], pch = 19, cex = 1, col = 'green')
+            }
+            if (length(s2)) {
+              points(gRates$time[s2], gRates$Dt[s2], pch = 19, cex = 1.25)
+            }
+          }
         }
-        if (length(s2)) {
-          points(gRates$time[s2], gRates$Dt[s2], pch = 19, cex = 1.25)
-        }
-      }
+      )
     }
   })
   output$text_dataPeriodicAnalysis_interval <- renderText({
@@ -597,8 +622,8 @@ shinyServer(function(input, output, session) {
   output$dataAnalysisPeriodicPlot <- renderPlotly({
     if (!is.null(dataPeriodic())) {
       withProgress(
-        message = "Processing periodic data...",
-        value = 0.0,
+        message = "Plotting graph...",
+        value = 0.4,
         {
           selectedData <- dataPeriodic()[c("time", paste0(dataColumnNames$X[match(input$select_dataAnalysisPeriodic_dataSeries, dataColumnNames$Y)], '_mean'), paste0(dataColumnNames$X[match(input$select_dataAnalysisPeriodic_dataSeries, dataColumnNames$Y)], '_sd'))]
           colnames(selectedData) <- c("time", "mean", "sd")
@@ -630,35 +655,47 @@ shinyServer(function(input, output, session) {
   }, server = FALSE)
   output$dataCalibrationsPlot <- renderPlot({
     if (!is.null(calibrationStability())) {
-      gRates <- calibrationStability() %>% filter(abs(slope) <= (input$slider_dataCalibration_acceptableSlope))
-      if (dim(gRates)[1] > 0) {
-        s1 = NULL
-        s2 = input$dataCalibrationsTable_rows_selected
-        twoord.plot(lx = gRates$time,
-          ly = gRates$slope,
-          rx = gRates$time,
-          ry = gRates$parameter,
-          xlim = rangesCalibrations$x,
-          lylim = rangesCalibrations$y,
-          # rylim = y2lim,
-          xlab = "Experiment duration, h",
-          ylab = "Slope, signal/h",
-          rylab = "Parameter",
-          rcol = 3,
-          rpch = 1)
-        if (length(s1)) {
-          points(gRates[s1, , drop = FALSE], pch = 19, cex = 1, col = 'green')
+      withProgress(
+        message = "Plotting graph...",
+        value = 0.4,
+        {
+          gRates <- calibrationStability() %>% filter(abs(slope) <= (input$slider_dataCalibration_acceptableSlope))
+          if (dim(gRates)[1] > 0) {
+            s1 = NULL
+            s2 = input$dataCalibrationsTable_rows_selected
+            twoord.plot(lx = gRates$time,
+              ly = gRates$slope,
+              rx = gRates$time,
+              ry = gRates$parameter,
+              xlim = rangesCalibrations$x,
+              lylim = rangesCalibrations$y,
+              # rylim = y2lim,
+              xlab = "Experiment duration, h",
+              ylab = "Slope, signal/h",
+              rylab = "Parameter",
+              rcol = 3,
+              rpch = 1)
+            if (length(s1)) {
+              points(gRates[s1, , drop = FALSE], pch = 19, cex = 1, col = 'green')
+            }
+            if (length(s2)) {
+              points(gRates$time[s2], gRates$slope[s2], pch = 19, cex = 1.25)
+            }
+          }
         }
-        if (length(s2)) {
-          points(gRates$time[s2], gRates$slope[s2], pch = 19, cex = 1.25)
-        }
-      }
+      )
     }
   })
   output$dataCalibrationsFitPlot <- renderPlot({
-    plot(calibrationFit()$parameter, calibrationFit()$value, type = "p")
-    fit <- lm(value ~  parameter, data = calibrationFit())
-    # TODO adjust newdata definition
-    lines(x = calibrationFit()$parameter, y = predict(fit, parameter = calibrationFit()$parameter))
+    withProgress(
+      message = "Plotting graph...",
+      value = 0.4,
+      {
+        plot(calibrationFit()$parameter, calibrationFit()$value, type = "p")
+        fit <- lm(value ~  parameter, data = calibrationFit())
+        # TODO adjust newdata definition
+        lines(x = calibrationFit()$parameter, y = predict(fit, parameter = calibrationFit()$parameter))
+      }
+    )
   })
 })
