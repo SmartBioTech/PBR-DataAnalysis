@@ -320,6 +320,9 @@ shinyServer(function(input, output, session) {
                 next
               }
               dataFit <- data[[columnName]][data$group %in% j]
+              if (length(dataFit[!is.na(dataFit)]) < length(timeFit)) {
+                next()
+              }
               fit <- nls(dataFit ~ exp(a + b * timeFit),
                         start = list(a = 0, b = 0.1),
                         control = list(maxiter = 99, minFactor = 1/2048, warnOnly = TRUE))
