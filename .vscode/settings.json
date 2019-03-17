@@ -1,0 +1,15 @@
+{
+  "sqltools.connections": [
+    {
+      "askForPassword": false,
+      "connectionTimeout": 30,
+      "database": "u308762622_shiny",
+      "dialect": "MySQL",
+      "name": "Hostinger Shiny",
+      "password": "VT16Drasov",
+      "port": 3306,
+      "server": "sql189.main-hosting.eu",
+      "username": "u308762622_doab"
+    }
+  ]
+}
