@@ -3,15 +3,15 @@ shinyServer(function(input, output, session) {
   rangesAnalysisGC <- reactiveValues(x = NULL, y = NULL)
   rangesAnalysisTurbi <- reactiveValues(x = NULL, y = NULL)
   rangesCalibrations <-  reactiveValues(x = NULL, y = NULL)
-  #  observeEvent(input$regSend, {
-  #     source('dbRegister.R', local = TRUE, echo = FALSE)
-  #     updateActionButton(
-  #        session, 'regSend',
-  #        label = "Successfully Sent!"
-  #     )
-  #   },
-  #   ignoreNULL = TRUE
-  #  )
+  observeEvent(input$regSend, {
+    source('dbAddRegistration.R', local = TRUE, echo = FALSE)
+    updateActionButton(
+        session, 'regSend',
+        label = "Successfully Sent!"
+    )
+  },
+  ignoreNULL = TRUE
+  )
   observeEvent(input$dataViewPlot_dblClick, {
     brush <- input$dataViewPlot_brush
     if (!is.null(brush)) {
@@ -320,7 +320,7 @@ shinyServer(function(input, output, session) {
               }
               dataFit <- data[[columnName]][data$group %in% j]
               if (length(dataFit[!is.na(dataFit)]) < length(timeFit)) {
-                next()
+                next
               }
               fit <- nls(dataFit ~ exp(a + b * timeFit),
                         start = list(a = 0, b = 0.1),
