@@ -83,7 +83,7 @@ shinyServer(function(input, output, session) {
     }
     pumpsAvailable <- c("Pump 0", "Pump 3", "Pump 4", "Pump 5", "Pump 6", "Pump 7")
     selectChoices <- merge(data.frame(X = colnames(untidyData)), dataColumnNames)
-    pA <- pumpsAvailable[which(!is.na(match(pumpsAvailable, selectChoices$Y)))]
+    pA <- pumpsAvailable[max(which(!is.na(match(pumpsAvailable, selectChoices$Y))))]
     if (is.na(pA)) {
       hideTab(inputId = 'conditionedSidePanels', target = "Data Analysis - Turbidostat")
     } else {
