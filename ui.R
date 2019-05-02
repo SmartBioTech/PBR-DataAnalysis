@@ -117,10 +117,10 @@ shinyUI(fluidPage(
             'right',
             options = list(container = 'body')
           ),
-          checkboxInput('checkbox_dataAnalysisPeriodic_searchPeriod', 
-            "Identify the period [EXPERIMENTAL]",
-            FALSE
-           ),
+          # checkboxInput('checkbox_dataAnalysisPeriodic_searchPeriod', 
+          #   "Identify the period [EXPERIMENTAL]",
+          #   FALSE
+          #  ),
           sliderInput( 'slider_dataAnalysisPeriodic_noPeriods',
             "No. of periods", 
             value = 5, min = 1, max = 10, step = 1
@@ -165,40 +165,40 @@ shinyUI(fluidPage(
           )
         )
       ),
-      conditionalPanel(condition = 'input.conditionedSidePanels == 5',
-        fluidRow(
-          fileInput( 'file_calibration',
-            "Choose a calibration file to upload",
-            accept = c( 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.xlsx' )
-          )
-        ),
-        fluidRow(
-          sliderInput( 'slider_dataCalibration_interval',
-            "Averaging interval, min", 
-            value = 30, min = 15, max = 240, step = 15
-          ),
-          bsTooltip( 'slider_dataCalibration_interval',
-            "Interval that is used for lumping and averaging untidy data. Provided in minutes.",
-            'right', options = list(container = 'body')
-          ),
-          sliderInput( 'slider_dataCalibration_acceptableSlope',
-            "Acceptable stabilization slope", 
-            value = 5, min = 0, max = 10, step = 1
-          )
-        ),
-        tags$hr(),
-        fluidRow(
-          selectInput('select_dataCalibration_series',
-            "Data to view",
-            "dO2"
-          )
-        )
-      ),
-      conditionalPanel(condition = 'input.conditionedSidePanels == 6',
-        fluidRow(
-          br()
-        ) 
-      ),
+      # conditionalPanel(condition = 'input.conditionedSidePanels == 5',
+        # fluidRow(
+        #   fileInput( 'file_calibration',
+        #     "Choose a calibration file to upload",
+        #     accept = c( 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.xlsx' )
+        #   )
+        # ),
+        # fluidRow(
+        #   sliderInput( 'slider_dataCalibration_interval',
+        #     "Averaging interval, min", 
+        #     value = 30, min = 15, max = 240, step = 15
+        #   ),
+        #   bsTooltip( 'slider_dataCalibration_interval',
+        #     "Interval that is used for lumping and averaging untidy data. Provided in minutes.",
+        #     'right', options = list(container = 'body')
+        #   ),
+        #   sliderInput( 'slider_dataCalibration_acceptableSlope',
+        #     "Acceptable stabilization slope", 
+        #     value = 5, min = 0, max = 10, step = 1
+        #   )
+        # ),
+        # tags$hr(),
+        # fluidRow(
+        #   selectInput('select_dataCalibration_series',
+        #     "Data to view",
+        #     "dO2"
+        #   )
+        # )
+      # ),
+      # conditionalPanel(condition = 'input.conditionedSidePanels == 6',
+      #   fluidRow(
+      #     br()
+      #   ) 
+      # ),
       width = 3
     ),
     # UI - Main panel ====
@@ -269,59 +269,59 @@ shinyUI(fluidPage(
             )
           )
         ),
-        tabPanel("Calibrations",
-          value = 5,
-          fluidRow(
-            column(
-              4,
-              br(),
-              DT::dataTableOutput('dataCalibrationsTable')
-            ),
-            column(
-              8,
-              plotOutput('dataCalibrationsPlot' , 
-                dblclick = 'dataCalibrationsPlot_dblClick',
-                brush = brushOpts(
-                    id = 'dataCalibrationsPlot_brush',
-                    resetOnNew = TRUE
-                )
-              )
-            )
-          ),
-          fluidRow(
-            column(
-              4,
-              br()
-            ),
-            column(
-              8,
-              plotOutput('dataCalibrationsFitPlot')
-            )
-          )
-        ),
-        tabPanel("Advanced",
-          value = 6,
-          fluidRow(
-            column(
-              4,
-              br()
-            ),
-            column(
-              8,
-              br()
-            )
-          ),
-          fluidRow(
-            column(
-              4,
-              br()
-            ),
-            column(
-              8,
-              br()
-            )
-          )
-        ),
+        # tabPanel("Calibrations",
+        #   value = 5,
+        #   fluidRow(
+        #     column(
+        #       4,
+        #       br(),
+        #       DT::dataTableOutput('dataCalibrationsTable')
+        #     ),
+        #     column(
+        #       8,
+        #       plotOutput('dataCalibrationsPlot' , 
+        #         dblclick = 'dataCalibrationsPlot_dblClick',
+        #         brush = brushOpts(
+        #             id = 'dataCalibrationsPlot_brush',
+        #             resetOnNew = TRUE
+        #         )
+        #       )
+        #     )
+        #   ),
+        #   fluidRow(
+        #     column(
+        #       4,
+        #       br()
+        #     ),
+        #     column(
+        #       8,
+        #       plotOutput('dataCalibrationsFitPlot')
+        #     )
+        #   )
+        # ),
+        # tabPanel("Advanced",
+        #   value = 6,
+        #   fluidRow(
+        #     column(
+        #       4,
+        #       br()
+        #     ),
+        #     column(
+        #       8,
+        #       br()
+        #     )
+        #   ),
+        #   fluidRow(
+        #     column(
+        #       4,
+        #       br()
+        #     ),
+        #     column(
+        #       8,
+        #       br()
+        #     )
+        #   )
+        # ),
         id = 'conditionedSidePanels',
         type = 'tabs'
       ),

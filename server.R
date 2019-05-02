@@ -56,9 +56,9 @@ shinyServer(function(input, output, session) {
       rangesCalibrations$y <- NULL
     }
   })
-  observeEvent(input$slider_dataAnalysisPeriodic_period, {
-    isolate(updateCheckboxInput(session,  'checkbox_dataAnalysisPeriodic_searchPeriod', value = FALSE))
-  })
+  # observeEvent(input$slider_dataAnalysisPeriodic_period, {
+  #   isolate(updateCheckboxInput(session,  'checkbox_dataAnalysisPeriodic_searchPeriod', value = FALSE))
+  # })
   # File processing ====
   # Upload
   dataInput <- reactive({
@@ -387,45 +387,45 @@ shinyServer(function(input, output, session) {
         periodicData <- subset(dataProcessed_d(), ((time > input$slider_dataAnalysisPeriodic_startTime + input$slider_dataAnalysisPeriodic_shift) & (time < (input$slider_dataAnalysisPeriodic_startTime + input$slider_dataAnalysisPeriodic_shift + input$slider_dataAnalysisPeriodic_period * input$slider_dataAnalysisPeriodic_noPeriods))))
         incProgress(0.3)
         # period determination
-        if (input$checkbox_dataAnalysisPeriodic_searchPeriod) {
-          withProgress(
-            message = "Identifying the period ...",
-            value = 0.3,
-            {
-              yvalues <- periodicData[dataColumnNames$X[match(input$select_dataAnalysisPeriodic_dataSeries, dataColumnNames$Y)]]
-              xvalues <- periodicData$time
-              bp <- boxplot(yvalues)
-              xvalues <- xvalues[!yvalues[[1]] %in% bp$out]
-              yvalues <- yvalues[[1]][!yvalues[[1]] %in% bp$out]
-              bp <- boxplot(yvalues)
-              incProgress(0.4)
-              out <- tryCatch({
-                # TODO need to be replaced with an empty object initialization and evaluated as a part of FOR cycle
-                model_final <- nls(yvalues ~ b1 + a1 * sin(2 * pi * (xvalues - d1) / tau), start = list(a1 = ((bp$stats[5] - bp$stats[1]) / 2), b1 = bp$stats[3], tau = input$slider_dataAnalysisPeriodic_period, d1 = 0), control = list(warnOnly = TRUE))
-                incProgress(0.1)
-                periodTestSet <- seq(from = floor(input$slider_dataAnalysisPeriodic_period * 2 / 3), to = ceiling(input$slider_dataAnalysisPeriodic_period * 3 / 2), by = round(input$slider_dataAnalysisPeriodic_period / 6, digits = 0))
-                for (i in periodTestSet) {
-                  model <- nls(yvalues ~ b1 + a1 * sin(2 * pi * (xvalues - d1) / tau), start = list(a1 = ((bp$stats[5] - bp$stats[1]) / 2), b1 = bp$stats[3], tau = i, d1 = 0), control = list(warnOnly = TRUE))
-                  incProgress(0.9 / length(periodTestSet))
-                  if (summary(model_final)$sigma > summary(model)$sigma) {
-                    model_final <- model
-                  }
-                }
-              },
-              error = function(cond) {
-                message(cond)
-                # Choose a return value in case of error
-                return(NULL)
-              },
-              warning = function(cond) {
-                message(cond)
-                # Choose a return value in case of warning
-                return(NULL)
-              })
-            isolate(updateSliderInput(session, 'slider_dataAnalysisPeriodic_period', value = as.numeric(coef(model_final)['tau']), step = 0.1))
-            }
-          )
-        }
+        # if (input$checkbox_dataAnalysisPeriodic_searchPeriod) {
+        #   withProgress(
+        #     message = "Identifying the period ...",
+        #     value = 0.3,
+        #     {
+        #       yvalues <- periodicData[dataColumnNames$X[match(input$select_dataAnalysisPeriodic_dataSeries, dataColumnNames$Y)]]
+        #       xvalues <- periodicData$time
+        #       bp <- boxplot(yvalues)
+        #       xvalues <- xvalues[!yvalues[[1]] %in% bp$out]
+        #       yvalues <- yvalues[[1]][!yvalues[[1]] %in% bp$out]
+        #       bp <- boxplot(yvalues)
+        #       incProgress(0.4)
+        #       out <- tryCatch({
+        #         # TODO need to be replaced with an empty object initialization and evaluated as a part of FOR cycle
+        #         model_final <- nls(yvalues ~ b1 + a1 * sin(2 * pi * (xvalues - d1) / tau), start = list(a1 = ((bp$stats[5] - bp$stats[1]) / 2), b1 = bp$stats[3], tau = input$slider_dataAnalysisPeriodic_period, d1 = 0), control = list(warnOnly = TRUE))
+        #         incProgress(0.1)
+        #         periodTestSet <- seq(from = floor(input$slider_dataAnalysisPeriodic_period * 2 / 3), to = ceiling(input$slider_dataAnalysisPeriodic_period * 3 / 2), by = round(input$slider_dataAnalysisPeriodic_period / 6, digits = 0))
+        #         for (i in periodTestSet) {
+        #           model <- nls(yvalues ~ b1 + a1 * sin(2 * pi * (xvalues - d1) / tau), start = list(a1 = ((bp$stats[5] - bp$stats[1]) / 2), b1 = bp$stats[3], tau = i, d1 = 0), control = list(warnOnly = TRUE))
+        #           incProgress(0.9 / length(periodTestSet))
+        #           if (summary(model_final)$sigma > summary(model)$sigma) {
+        #             model_final <- model
+        #           }
+        #         }
+        #       },
+        #       error = function(cond) {
+        #         message(cond)
+        #         # Choose a return value in case of error
+        #         return(NULL)
+        #       },
+        #       warning = function(cond) {
+        #         message(cond)
+        #         # Choose a return value in case of warning
+        #         return(NULL)
+        #       })
+        #     isolate(updateSliderInput(session, 'slider_dataAnalysisPeriodic_period', value = as.numeric(coef(model_final)['tau']), step = 0.1))
+        #     }
+        #   )
+        # }
         periodicData$time <- round(((periodicData$time - input$slider_dataAnalysisPeriodic_startTime + input$slider_dataAnalysisPeriodic_shift) %% input$slider_dataAnalysisPeriodic_period) / factor) * factor
         averagedData <- periodicData %>% group_by(time) %>% summarize_all(funs(mean, sd), na.rm = TRUE)
         incProgress(0.4)
