@@ -4,7 +4,7 @@ shinyServer(function(input, output, session) {
   rangesAnalysisTurbi <- reactiveValues(x = NULL, y = NULL)
   rangesCalibrations <-  reactiveValues(x = NULL, y = NULL)
   observeEvent(input$regSend, {
-    source('dbAddRegistration.R', local = TRUE, echo = FALSE)
+    # source('dbAddRegistration.R', local = TRUE, echo = FALSE)
     updateActionButton(
         session, 'regSend',
         label = "Successfully Sent!"

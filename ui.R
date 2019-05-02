@@ -196,7 +196,8 @@ shinyUI(fluidPage(
       ),
       conditionalPanel(condition = 'input.conditionedSidePanels == 6',
         fluidRow(
-        print() 
+          br()
+        ) 
       ),
       width = 3
     ),
@@ -249,14 +250,14 @@ shinyUI(fluidPage(
               DT::dataTableOutput('dataAnalysisTurbiTable')
             ),
             column(
-                8,
-                plotOutput('dataAnalysisTurbiPlot',   
-                  dblclick = 'dataAnalysisTurbiPlot_dblClick',
-                  brush = brushOpts(
-                    id = 'dataAnalysisTurbiPlot_brush',
-                    resetOnNew = TRUE
-                  )
+              8,
+              plotOutput('dataAnalysisTurbiPlot',   
+                dblclick = 'dataAnalysisTurbiPlot_dblClick',
+                brush = brushOpts(
+                  id = 'dataAnalysisTurbiPlot_brush',
+                  resetOnNew = TRUE
                 )
+              )
             )
           )
         ),
@@ -298,28 +299,16 @@ shinyUI(fluidPage(
             )
           )
         ),
-        id = 'conditionedSidePanels',
-        type = 'tabs'
-      ),
-      tabPanel("Advanced",
+        tabPanel("Advanced",
           value = 6,
           fluidRow(
             column(
               4,
-              print()
-              # br(),
-              # DT::dataTableOutput('dataCalibrationsTable')
+              br()
             ),
             column(
               8,
-              print()
-              # plotOutput('dataCalibrationsPlot' , 
-              #   dblclick = 'dataCalibrationsPlot_dblClick',
-              #   brush = brushOpts(
-              #       id = 'dataCalibrationsPlot_brush',
-              #       resetOnNew = TRUE
-                )
-              )
+              br()
             )
           ),
           fluidRow(
@@ -329,8 +318,7 @@ shinyUI(fluidPage(
             ),
             column(
               8,
-              print()
-              # plotOutput('dataCalibrationsFitPlot')
+              br()
             )
           )
         ),
